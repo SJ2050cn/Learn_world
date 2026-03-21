@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #====================================================
-#	System Request:Debian 9+/Ubuntu 18.04+/Centos 7+
+#	System Request:Debian 9+/Ubuntu 18.04+/Centos 7+/AlmaLinux 8+/Rocky Linux 8+
 #	Author:	wulabing, SJ2050
 #	Dscription: V2ray ws+tls onekey Management
 #	Version: 1.0
@@ -53,9 +53,9 @@ v2ray_access_log="/var/log/v2ray/access.log"
 v2ray_error_log="/var/log/v2ray/error.log"
 amce_sh_file="/root/.acme.sh/acme.sh"
 ssl_update_file="/usr/bin/ssl_update.sh"
-nginx_version="1.21.4.1"
-openssl_version="1.1.1k"
-jemalloc_version="5.2.1"
+nginx_version="1.29.2.1"
+openssl_version="3.5.5"
+jemalloc_version="5.3.0"
 old_config_status="off"
 # v2ray_plugin_version="$(wget -qO- "https://github.com/shadowsocks/v2ray-plugin/tags" | grep -E "/shadowsocks/v2ray-plugin/releases/tag/" | head -1 | sed -r 's/.*tag\/v(.+)\">.*/\1/')"
 
@@ -78,6 +78,12 @@ check_system() {
     if [[ "${ID}" == "centos" && ${VERSION_ID} -ge 7 ]]; then
         echo -e "${OK} ${GreenBG} 当前系统为 Centos ${VERSION_ID} ${VERSION} ${Font}"
         INS="yum"
+    elif [[ "${ID}" == "almalinux" && ${VERSION_ID} -ge 8 ]]; then
+        echo -e "${OK} ${GreenBG} 当前系统为 AlmaLinux ${VERSION_ID} ${VERSION} ${Font}"
+        INS="dnf"
+    elif [[ "${ID}" == "rocky" && ${VERSION_ID} -ge 8 ]]; then
+        echo -e "${OK} ${GreenBG} 当前系统为 Rocky Linux ${VERSION_ID} ${VERSION} ${Font}"
+        INS="dnf"
     elif [[ "${ID}" == "debian" && ${VERSION_ID} -ge 8 ]]; then
         echo -e "${OK} ${GreenBG} 当前系统为 Debian ${VERSION_ID} ${VERSION} ${Font}"
         INS="apt"
@@ -133,7 +139,7 @@ chrony_install() {
 
     timedatectl set-ntp true
 
-    if [[ "${ID}" == "centos" ]]; then
+    if [[ "${ID}" == "centos" || "${ID}" == "almalinux" || "${ID}" == "rocky" ]]; then
         systemctl enable chronyd && systemctl restart chronyd
     else
         systemctl enable chrony && systemctl restart chrony
@@ -166,14 +172,14 @@ chrony_install() {
 dependency_install() {
     ${INS} install wget git lsof -y
 
-    if [[ "${ID}" == "centos" ]]; then
+    if [[ "${ID}" == "centos" || "${ID}" == "almalinux" || "${ID}" == "rocky" ]]; then
         ${INS} -y install crontabs
     else
         ${INS} -y install cron
     fi
     judge "安装 crontab"
 
-    if [[ "${ID}" == "centos" ]]; then
+    if [[ "${ID}" == "centos" || "${ID}" == "almalinux" || "${ID}" == "rocky" ]]; then
         touch /var/spool/cron/root && chmod 600 /var/spool/cron/root
         systemctl start crond && systemctl enable crond
     else
@@ -195,14 +201,14 @@ dependency_install() {
     ${INS} -y install curl
     judge "安装 curl"
 
-    if [[ "${ID}" == "centos" ]]; then
+    if [[ "${ID}" == "centos" || "${ID}" == "almalinux" || "${ID}" == "rocky" ]]; then
         ${INS} -y groupinstall "Development tools"
     else
         ${INS} -y install build-essential
     fi
     judge "编译工具包 安装"
 
-    if [[ "${ID}" == "centos" ]]; then
+    if [[ "${ID}" == "centos" || "${ID}" == "almalinux" || "${ID}" == "rocky" ]]; then
         ${INS} -y install pcre pcre-devel zlib-devel epel-release
     else
         ${INS} -y install libpcre3 libpcre3-dev zlib1g-dev dbus
@@ -216,7 +222,7 @@ dependency_install() {
 
     #    sed -i -r '/^HRNGDEVICE/d;/#HRNGDEVICE=\/dev\/null/a HRNGDEVICE=/dev/urandom' /etc/default/rng-tools
 
-    if [[ "${ID}" == "centos" ]]; then
+    if [[ "${ID}" == "centos" || "${ID}" == "almalinux" || "${ID}" == "rocky" ]]; then
         #       systemctl start rngd && systemctl enable rngd
         #       judge "rng-tools 启动"
         systemctl start haveged && systemctl enable haveged
@@ -239,7 +245,7 @@ basic_optimization() {
     echo '* hard nofile 65536' >>/etc/security/limits.conf
 
     # 关闭 Selinux
-    if [[ "${ID}" == "centos" ]]; then
+    if [[ "${ID}" == "centos" || "${ID}" == "almalinux" || "${ID}" == "rocky" ]]; then
         sed -i 's/^SELINUX=.*/SELINUX=disabled/' /etc/selinux/config
         setenforce 0
     fi
@@ -310,7 +316,7 @@ web_camouflage() {
     rm -rf /home/wwwroot
     mkdir -p /home/wwwroot
     cd /home/wwwroot || exit
-    git clone https://github.com/SJ2050cn/static-nav
+    git clone https://github.com/SJ2050cn/tech-nav.git
     judge "web 站点伪装"
 }
 
@@ -566,7 +572,7 @@ nginx_conf_add() {
         ssl_ciphers           TLS13-AES-256-GCM-SHA384:TLS13-CHACHA20-POLY1305-SHA256:TLS13-AES-128-GCM-SHA256:TLS13-AES-128-CCM-8-SHA256:TLS13-AES-128-CCM-SHA256:EECDH+CHACHA20:EECDH+CHACHA20-draft:EECDH+ECDSA+AES128:EECDH+aRSA+AES128:RSA+AES128:EECDH+ECDSA+AES256:EECDH+aRSA+AES256:RSA+AES256:EECDH+ECDSA+3DES:EECDH+aRSA+3DES:RSA+3DES:!MD5;
         server_name           serveraddr.com;
         index index.html index.htm;
-        root  /home/wwwroot/static-nav;
+        root  /home/wwwroot/tech-nav;
         error_page 400 = /400.html;
 
         # Config for 0-RTT in TLSv1.3
