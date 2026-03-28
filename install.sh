@@ -54,8 +54,8 @@ v2ray_error_log="/var/log/v2ray/error.log"
 amce_sh_file="/root/.acme.sh/acme.sh"
 ssl_update_file="/usr/bin/ssl_update.sh"
 nginx_version="1.29.2.1"
-openssl_version="3.5.5"
-jemalloc_version="5.3.0"
+# openssl_version="1.1.1k"
+# jemalloc_version="5.2.1"
 old_config_status="off"
 # v2ray_plugin_version="$(wget -qO- "https://github.com/shadowsocks/v2ray-plugin/tags" | grep -E "/shadowsocks/v2ray-plugin/releases/tag/" | head -1 | sed -r 's/.*tag\/v(.+)\">.*/\1/')"
 
@@ -78,12 +78,21 @@ check_system() {
     if [[ "${ID}" == "centos" && ${VERSION_ID} -ge 7 ]]; then
         echo -e "${OK} ${GreenBG} 当前系统为 Centos ${VERSION_ID} ${VERSION} ${Font}"
         INS="yum"
-    elif [[ "${ID}" == "almalinux" && ${VERSION_ID} -ge 8 ]]; then
+	    $INS update
+    elif [[ "${ID}" == "almalinux" ]]; then
         echo -e "${OK} ${GreenBG} 当前系统为 AlmaLinux ${VERSION_ID} ${VERSION} ${Font}"
         INS="dnf"
-    elif [[ "${ID}" == "rocky" && ${VERSION_ID} -ge 8 ]]; then
+        $INS update
+        $INS install epel-release -y
+        $INS clean all
+        $INS makecache
+    elif [[ "${ID}" == "rocky" ]]; then
         echo -e "${OK} ${GreenBG} 当前系统为 Rocky Linux ${VERSION_ID} ${VERSION} ${Font}"
         INS="dnf"
+        $INS update
+        $INS install epel-release -y
+        $INS clean all
+        $INS makecache
     elif [[ "${ID}" == "debian" && ${VERSION_ID} -ge 8 ]]; then
         echo -e "${OK} ${GreenBG} 当前系统为 Debian ${VERSION_ID} ${VERSION} ${Font}"
         INS="apt"
@@ -363,39 +372,18 @@ nginx_install() {
 
     wget -nc --no-check-certificate https://openresty.org/download/openresty-$nginx_version.tar.gz -P ${nginx_openssl_src}
     judge "Nginx 下载"
-    wget -nc --no-check-certificate https://www.openssl.org/source/openssl-${openssl_version}.tar.gz -P ${nginx_openssl_src}
-    judge "openssl 下载"
-    wget -nc --no-check-certificate https://github.com/jemalloc/jemalloc/releases/download/${jemalloc_version}/jemalloc-${jemalloc_version}.tar.bz2 -P ${nginx_openssl_src}
-    judge "jemalloc 下载"
 
     cd ${nginx_openssl_src} || exit
 
     [[ -d openresty-"$nginx_version" ]] && rm -rf openresty-"$nginx_version"
     tar -zxvf openresty-"$nginx_version".tar.gz
 
-    [[ -d openssl-"$openssl_version" ]] && rm -rf openssl-"$openssl_version"
-    tar -zxvf openssl-"$openssl_version".tar.gz
-
-    [[ -d jemalloc-"${jemalloc_version}" ]] && rm -rf jemalloc-"${jemalloc_version}"
-    tar -xvf jemalloc-"${jemalloc_version}".tar.bz2
-
     [[ -d "$nginx_dir" ]] && rm -rf ${nginx_dir}
-
-    echo -e "${OK} ${GreenBG} 即将开始编译安装 jemalloc ${Font}"
-    sleep 2
-
-    cd jemalloc-${jemalloc_version} || exit
-    ./configure
-    judge "编译检查"
-    make -j "${THREAD}" && make install
-    judge "jemalloc 编译安装"
-    echo '/usr/local/lib' >/etc/ld.so.conf.d/local.conf
-    ldconfig
 
     echo -e "${OK} ${GreenBG} 即将开始编译安装 Nginx, 过程稍久，请耐心等待 ${Font}"
     sleep 4
 
-    cd ../openresty-${nginx_version} || exit
+    cd ./openresty-${nginx_version} || exit
 
     ./configure --prefix="${nginx_dir%/*}" \
         --with-http_ssl_module \
@@ -408,9 +396,7 @@ nginx_install() {
         --with-http_mp4_module \
         --with-http_secure_link_module \
         --with-http_v2_module \
-        --with-cc-opt='-O3' \
-        --with-ld-opt="-ljemalloc" \
-        --with-openssl=../openssl-"$openssl_version"
+        --with-cc-opt='-O3'
     judge "编译检查"
     make -j "${THREAD}" && make install
     judge "Nginx 编译安装"
@@ -423,16 +409,14 @@ nginx_install() {
 
     # 删除临时文件
     rm -rf ../openresty-"${nginx_version}"
-    rm -rf ../openssl-"${openssl_version}"
     rm -rf ../openresty-"${nginx_version}".tar.gz
-    rm -rf ../openssl-"${openssl_version}".tar.gz
 
     # 添加配置文件夹，适配旧版脚本
     mkdir ${nginx_dir}/conf/conf.d
 }
 
 ssl_install() {
-    if [[ "${ID}" == "centos" ]]; then
+    if [[ "${ID}" == "centos" || "${ID}" == "almalinux" || "${ID}" == "rocky" ]]; then
         ${INS} install socat nc -y
 	elif [[ "${ID}" == "debian" && ${VERSION_ID} -ge 12 ]]; then
 		${INS} install socat netcat-openbsd -y
@@ -661,7 +645,7 @@ nginx_process_disabled() {
 acme_cron_update() {
     wget -N -P /usr/bin --no-check-certificate "https://raw.githubusercontent.com/SJ2050cn/Learn_world/dev/ssl_update.sh"
     if [[ $(crontab -l | grep -c "ssl_update.sh") -lt 1 ]]; then
-      if [[ "${ID}" == "centos" ]]; then
+      if [[ "${ID}" == "centos" || "${ID}" == "almalinux" || "${ID}" == "rocky" ]]; then
           #        sed -i "/acme.sh/c 0 3 * * 0 \"/root/.acme.sh\"/acme.sh --cron --home \"/root/.acme.sh\" \
           #        &> /dev/null" /var/spool/cron/root
           sed -i "/acme.sh/c 0 3 * * 0 bash ${ssl_update_file}" /var/spool/cron/root
